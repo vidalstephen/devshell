@@ -23,6 +23,8 @@ RUN apt-get update && \
         iputils-ping \
         net-tools \
         htop \
+        socat \
+        netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Add Docker's official GPG key and repository
