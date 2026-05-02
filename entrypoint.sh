@@ -44,7 +44,6 @@ usermod -aG docker "$USERNAME" 2>/dev/null || true
 usermod -aG sudo "$USERNAME" 2>/dev/null || true
 
 # Unlock user account for SSH key authentication
-# Set a password to unlock (SSH is key-only, password login disabled in sshd_config)
 echo "$USERNAME:$(openssl rand -base64 32)" | chpasswd
 
 # Configure passwordless sudo
@@ -57,7 +56,7 @@ if [ -d "$SSH_DIR" ]; then
     echo "Fixing .ssh directory permissions"
     chown -R "$USERNAME:$USER_GID" "$SSH_DIR"
     chmod 700 "$SSH_DIR"
-    
+
     # Fix authorized_keys permissions if it exists
     if [ -f "$SSH_DIR/authorized_keys" ]; then
         chmod 600 "$SSH_DIR/authorized_keys"
@@ -87,9 +86,11 @@ alias dc="docker compose"
 # Prompt
 PS1="\[\e[32m\]\u@devshell\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\$ "
 
-# Welcome message
-echo "DevShell - Ubuntu 24.04"
-echo "NAS: /volume1 | Docker: API v1.43"
+# Welcome message (only shown in interactive terminal, not for SSH commands)
+if [ -t 1 ]; then
+    echo "DevShell - Ubuntu 24.04"
+    echo "NAS: /volume1 | Docker: API v1.43"
+fi
 BASHRC_EOF
     chown "$USERNAME:$USER_GID" "/home/$USERNAME/.bashrc"
 fi
