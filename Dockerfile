@@ -23,6 +23,8 @@ RUN apt-get update && \
         iputils-ping \
         net-tools \
         htop \
+        socat \
+        netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Add Docker's official GPG key and repository
@@ -46,14 +48,11 @@ RUN mkdir /var/run/sshd && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \
     sed -i 's/UsePAM yes/UsePAM no/' /etc/ssh/sshd_config && \
     echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config
+    echo "ChallengeResponseAuthentication no" >> /etc/ssh/sshd_config && \
+    echo "PrintMotd no" >> /etc/ssh/sshd_config && \
+    echo "Banner none" >> /etc/ssh/sshd_config
 
 # Create initial user structure (will be configured at runtime by entrypoint)
-# The entrypoint will handle:
-# - User creation with correct UID/GID
-# - Group alignment for docker socket
-# - SSH key permissions
-# This is just a placeholder to ensure the entrypoint can work
 RUN groupadd -g 100 users || true
 
 # Copy entrypoint script
