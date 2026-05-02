@@ -10,6 +10,7 @@ A clean, isolated Ubuntu 24.04 development environment with SSH access, Docker C
 - **User identity mirroring** (UID/GID matching Synology user)
 - **GitHub Actions CI/CD** for automated builds
 - **GHCR image distribution** (no local builds needed)
+- **socat** pre-installed for VS Code Remote SSH ProxyCommand support
 
 ## Architecture
 
@@ -91,6 +92,24 @@ docker compose up -d
 docker compose logs -f
 ```
 
+## VS Code Remote SSH
+
+Add to `~/.ssh/config`:
+
+```
+Host synology
+  HostName ngaged.synology.me
+  User msn0624c
+  Port 54321
+  IdentityFile ~/.ssh/id_ed25519
+
+Host devshell
+  HostName devshell
+  User msn0624c
+  IdentityFile ~/.ssh/id_ed25519
+  ProxyCommand ssh -p 54321 msn0624c@ngaged.synology.me "/usr/local/bin/docker exec -i devshell socat - TCP:127.0.0.1:22"
+```
+
 ## DNS Configuration
 
 Set up DNS record for external access:
@@ -99,13 +118,6 @@ Set up DNS record for external access:
 - **Name**: `devshell.nsystems.live`
 - **Value**: Your WAN IP
 - **Proxy**: OFF (DNS only)
-
-## Router Configuration
-
-Forward external port 22 to NAS internal port 2222:
-
-- **External**: Port 22
-- **Internal**: Port 2222 → 192.168.0.164
 
 ## Access Methods
 
@@ -119,22 +131,6 @@ ssh msn0624c@devshell.nsystems.live
 
 ```bash
 ssh -p 2222 msn0624c@192.168.0.164
-```
-
-### VS Code Remote-SSH
-
-Add to `~/.ssh/config`:
-
-```
-Host devshell
-  HostName devshell.nsystems.live
-  User msn0624c
-  Port 22
-
-Host devshell-lan
-  HostName 192.168.0.164
-  User msn0624c
-  Port 2222
 ```
 
 ## Updating
