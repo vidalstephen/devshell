@@ -23,7 +23,6 @@ RUN apt-get update && \
         iputils-ping \
         net-tools \
         htop \
-        socat \
         netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
