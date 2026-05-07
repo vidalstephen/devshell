@@ -1,100 +1,88 @@
-# DevShell - Ubuntu 24.04 Development Container
+# DevShell — Ubuntu 24.04 Development Container for Synology NAS
 
-A clean, isolated Ubuntu 24.04 development environment with SSH access, Docker CLI, and Docker Compose v2 integration for Synology NAS.
+A containerized Ubuntu 24.04 development environment running on a Synology NAS, accessible via VS Code Remote SSH from any machine.
 
 ## Features
 
 - **Ubuntu 24.04 LTS** base image
-- **SSH-only authentication** (no passwords)
-- **Docker CLI + Compose v2** with host socket passthrough
-- **User identity mirroring** (UID/GID matching Synology user)
-- **GitHub Actions CI/CD** for automated builds
-- **GHCR image distribution** (no local builds needed)
-- **socat** pre-installed for VS Code Remote SSH ProxyCommand support
+- **SSH-only authentication** (key-based, no passwords)
+- **Docker CLI + Compose v2** via host socket passthrough
+- **Full `/volume1` access** — NAS files accessible at the same path inside the container, so `docker compose` file references resolve correctly
+- **Persistent VS Code Server** — named volume survives container restarts (no re-download on reconnect)
+- **User identity mirroring** — UID/GID matches Synology user account
+- **GitHub Actions CI/CD** — image built externally to avoid DS220+ CPU load, pushed to GHCR
 
 ## Architecture
 
-The devshell runs on your Synology NAS but is built externally via GitHub Actions to avoid CPU/resource constraints on the DS220+.
-
-### Build & Deployment Flow
-
 ```
-GitHub Push → Actions Build → GHCR Push → NAS Pull → Container Start
+VS Code (Windows)
+  └─ SSH ProxyCommand
+       └─ ssh synology (port 54321)
+            └─ docker exec devshell nc localhost 22
+                 └─ devshell container (Ubuntu 24.04)
+                      ├─ /var/run/docker.sock → host Docker
+                      └─ /volume1 → NAS storage
+```
+
+Traffic flow for web services:
+```
+Internet → Cloudflare Tunnel → cloudflared container → Traefik (:8080) → services
 ```
 
 ## Prerequisites
 
-### On GitHub
-
-1. Fork or create this repository
-2. Enable GitHub Actions
-3. GitHub Container Registry is automatically available with `GITHUB_TOKEN`
-
 ### On Synology NAS
 
-1. Get Docker socket GID:
-   ```bash
-   stat -c %g /var/run/docker.sock
-   ```
-
-2. Create SSH keys directory:
-   ```bash
-   mkdir -p /volume1/docker/stacks/devshell/ssh
-   ```
-
-3. Add your public SSH key:
-   ```bash
-   cat ~/.ssh/id_ed25519.pub >> /volume1/docker/stacks/devshell/ssh/authorized_keys
-   chmod 600 /volume1/docker/stacks/devshell/ssh/authorized_keys
-   ```
-
-## Deployment on NAS
-
-### 1. Create Stack Directory
-
 ```bash
-ssh msn0624c@ngaged.synology.me -p 54321
-cd /volume1/docker/stacks
-mkdir -p devshell/ssh
-cd devshell
+# Get Docker socket GID
+stat -c %g /var/run/docker.sock
+
+# Create stack directory and SSH keys directory
+mkdir -p /volume1/docker/stacks/devshell/ssh
+
+# Add your public SSH key
+cat ~/.ssh/id_ed25519.pub >> /volume1/docker/stacks/devshell/ssh/authorized_keys
+chmod 600 /volume1/docker/stacks/devshell/ssh/authorized_keys
 ```
 
-### 2. Copy docker-compose.yml
+## Deployment
 
-Use the provided `docker-compose.yml` file from this repository.
-
-### 3. Create .env File
+### 1. Clone / copy files to NAS
 
 ```bash
+mkdir -p /volume1/docker/stacks/devshell
+cd /volume1/docker/stacks/devshell
+# Copy docker-compose.yml here
+```
+
+### 2. Create `.env`
+
+```bash
+cp .env.example .env
 nano .env
 ```
 
-Add:
 ```env
+GITHUB_USERNAME=vidalstephen
 USERNAME=msn0624c
 USER_UID=1026
 USER_GID=100
 ADMIN_GID=101
-DOCKER_GID=999  # Use the value from stat command above
-GITHUB_USERNAME=YOUR_GITHUB_USERNAME
+DOCKER_GID=968        # use value from: stat -c %g /var/run/docker.sock
+DOCKER_API_VERSION=1.43
 ```
 
-### 4. Deploy
+### 3. Deploy
 
 ```bash
-# Pull latest image from GHCR
-docker compose pull
-
-# Start container
-docker compose up -d
-
-# Check logs
-docker compose logs -f
+cd /volume1/docker/stacks/devshell
+/usr/local/bin/docker compose pull
+/usr/local/bin/docker compose up -d
 ```
 
-## VS Code Remote SSH
+## VS Code Remote SSH Setup
 
-Add to `~/.ssh/config`:
+### `~/.ssh/config`
 
 ```
 Host synology
@@ -104,105 +92,81 @@ Host synology
   IdentityFile ~/.ssh/id_ed25519
 
 Host devshell
-  HostName devshell
+  HostName localhost
+  Port 22
   User msn0624c
   IdentityFile ~/.ssh/id_ed25519
-  ProxyCommand ssh -p 54321 msn0624c@ngaged.synology.me "/usr/local/bin/docker exec -i devshell socat - TCP:127.0.0.1:22"
+  ProxyCommand ssh -p 54321 msn0624c@ngaged.synology.me "/usr/local/bin/docker exec -i devshell nc localhost 22"
 ```
 
-## DNS Configuration
+### VS Code Settings
 
-Set up DNS record for external access:
+Add to `settings.json` (required — devshell downloads the server binary directly from Microsoft's CDN):
 
-- **Type**: A record
-- **Name**: `devshell.nsystems.live`
-- **Value**: Your WAN IP
-- **Proxy**: OFF (DNS only)
-
-## Access Methods
-
-### External (Public)
-
-```bash
-ssh msn0624c@devshell.nsystems.live
+```json
+"remote.SSH.localServerDownload": "off"
 ```
 
-### Internal (LAN)
+### Connect
 
-```bash
-ssh -p 2222 msn0624c@192.168.0.164
-```
+In VS Code: **Remote Explorer → SSH → devshell**
+
+First connection downloads the VS Code Server (~112MB) into the persistent `devshell-vscode-server` volume. Subsequent connections are instant.
 
 ## Updating
 
-When you push changes to the GitHub repository:
-
-1. GitHub Actions automatically builds new image
-2. Image is pushed to GHCR with `:latest` and `:sha-xxxxx` tags
-3. On NAS, pull and restart:
-
 ```bash
 cd /volume1/docker/stacks/devshell
-docker compose pull
-docker compose up -d
+/usr/local/bin/docker compose pull
+/usr/local/bin/docker compose up -d
 ```
 
 ## Troubleshooting
 
-### Check container logs
 ```bash
-docker compose logs devshell
+# Container logs
+/usr/local/bin/docker compose logs devshell
+
+# Verify Docker socket access from inside container
+/usr/local/bin/docker exec devshell docker ps
+
+# Check SSH keys are mounted
+/usr/local/bin/docker exec devshell ls -la /home/msn0624c/.ssh/
+
+# Check user identity
+/usr/local/bin/docker exec devshell id msn0624c
 ```
 
-### Verify Docker socket access
-```bash
-docker exec devshell docker ps
-```
+### VS Code Server download fails
 
-### Check SSH configuration
-```bash
-docker exec devshell cat /etc/ssh/sshd_config
-```
-
-### Verify user permissions
-```bash
-docker exec devshell id msn0624c
-docker exec devshell groups msn0624c
-```
-
-### Test SSH key
-```bash
-docker exec devshell ls -la /home/msn0624c/.ssh/
-```
+If VS Code shows `ServerDownloadFailed`:
+- Confirm `"remote.SSH.localServerDownload": "off"` is set in VS Code settings
+- Test CDN access: `docker exec devshell curl -sI https://update.code.visualstudio.com`
+- Check `.vscode-server` ownership: `docker exec devshell ls -la ~`  — must be owned by `msn0624c`, not `root`
 
 ## Security Notes
 
-- **No password authentication** - SSH keys only
-- **No root login** - Root SSH access disabled
-- **Passwordless sudo** - User has sudo without password (trust-based)
-- **Docker socket access** - User can control host Docker (intentional for dev environment)
+- SSH key authentication only — password auth disabled
+- Root SSH login disabled
+- Port `2222` is bound to `127.0.0.1` only — not directly reachable from outside the NAS
+- Docker socket access is intentional for this dev environment
+- `DOCKER_API_VERSION` is set to match the Synology Docker daemon version
 
 ## Directory Structure
 
 ```
 devshell/
-├── .github/
-│   └── workflows/
-│       └── build-and-push.yml    # CI/CD workflow
-├── Dockerfile                     # Container image definition
-├── entrypoint.sh                  # Runtime configuration script
-├── docker-compose.yml             # NAS deployment configuration
-├── .env.example                   # Environment variables template
-└── README.md                      # This file
+├── .github/workflows/build-and-push.yml   # CI/CD
+├── Dockerfile                              # Container image
+├── entrypoint.sh                           # Runtime setup (users, perms, sshd)
+├── docker-compose.yml                      # Stack definition
+├── .env.example                            # Environment variable template
+└── README.md
 
 # On NAS:
 /volume1/docker/stacks/devshell/
 ├── docker-compose.yml
-├── .env
+├── .env                                    # Credentials — never commit
 └── ssh/
-    └── authorized_keys            # Your SSH public keys
+    └── authorized_keys                     # SSH public keys
 ```
-
-## License
-
-MIT
