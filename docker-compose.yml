@@ -19,6 +19,9 @@ services:
       # Get with: stat -c %g /var/run/docker.sock
       - DOCKER_GID=${DOCKER_GID:-999}
 
+      # Required for Docker CLI inside the container
+      - DOCKER_API_VERSION=${DOCKER_API_VERSION:-1.43}
+
     volumes:
       # SSH keys (authorized_keys must be in this directory)
       - ./ssh:/home/${USERNAME:-msn0624c}/.ssh:ro
@@ -35,13 +38,11 @@ services:
 
     ports:
       # Bind to localhost only — external access via ProxyCommand tunnel
-      # or router port forward to this port.
       - "127.0.0.1:2222:22"
 
     networks:
       - proxy
 
-    # Health check
     healthcheck:
       test: ["CMD-SHELL", "pgrep sshd || exit 1"]
       interval: 30s
