@@ -72,12 +72,11 @@ fi
 # Ensure home directory ownership
 chown "$USERNAME:$USER_GID" "/home/$USERNAME"
 
-# Write DOCKER_API_VERSION to /etc/profile.d/ so it is available in all shell
-# contexts, including non-interactive shells used by VS Code extensions/tasks.
-cat > /etc/profile.d/devshell.sh <<'PROFILE_EOF'
-export DOCKER_API_VERSION=1.43
-PROFILE_EOF
-chmod 644 /etc/profile.d/devshell.sh
+# Ensure .vscode-server directory exists with correct ownership.
+# The named Docker volume is initialized as root — fix it so VS Code Remote SSH
+# can write the server binary on first connect.
+mkdir -p "/home/$USERNAME/.vscode-server"
+chown "$USERNAME:$USER_GID" "/home/$USERNAME/.vscode-server"
 
 # Create default .bashrc if it doesn't exist
 if [ ! -f "/home/$USERNAME/.bashrc" ]; then
@@ -102,12 +101,18 @@ BASHRC_EOF
     chown "$USERNAME:$USER_GID" "/home/$USERNAME/.bashrc"
 fi
 
+# Write DOCKER_API_VERSION to /etc/profile.d so it is available in
+# non-interactive shells (VS Code tasks, extensions, etc.)
+cat > /etc/profile.d/devshell.sh <<'PROFILE_EOF'
+export DOCKER_API_VERSION=1.43
+PROFILE_EOF
+chmod 644 /etc/profile.d/devshell.sh
+
 # Display configuration summary
 echo "=== Configuration Summary ==="
 echo "User: $(id "$USERNAME")"
 echo "Groups: $(groups "$USERNAME")"
 echo "Docker socket: $(ls -la /var/run/docker.sock 2>/dev/null || echo 'Not mounted')"
-echo "NAS volume: $(ls /volume1 2>/dev/null | head -5 | tr '\n' ' ' || echo 'Not mounted')"
 if [ -f "$SSH_DIR/authorized_keys" ]; then
     echo "SSH keys: $(wc -l < "$SSH_DIR/authorized_keys") key(s) configured"
 fi
